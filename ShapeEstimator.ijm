@@ -4,16 +4,16 @@
 macro "Estimate shape of fishes" {
 	requires("1.49h")
 	
-	//var inputPath = "D:\\Roman\\XRegio\\Segmentations";
-	//var outputPath = "D:\\Roman\\XRegio\\Results";
-	var inputPath = "/Users/Roman/Documents/test_segmentations";
-	var outputPath = "/Users/Roman/Documents/test_results";
+	var inputPath = "D:\\Roman\\XRegio\\Segmentations";
+	var outputPath = "D:\\Roman\\XRegio\\Results";
+	//var inputPath = "/Users/Roman/Documents/test_segmentations";
+	//var outputPath = "/Users/Roman/Documents/test_results";
 
 	var methodPrefix = "segmented";
 	var fishPrefix = "fish";
 	var fileExt = ".tif";
 	var statisticsOutputExt = ".xls";
-	var fishNumbers = newArray("200");
+	var fishNumbers = newArray("3000");
 
 	var sliceStep = 10; //in percentage
 	var sliceNeighbours = 7; //odd number, othgerwise will be corrected by -1
@@ -59,7 +59,7 @@ function process(inputPath, outputPath, sliceStep, fishPrefix, fileExt, statisti
 		//Get border slices
 		volumeZBoundaries = getMinMaxBorderValueToArray(stackSlices, stackId, numBins);
 		Array.print(volumeZBoundaries);
-
+/*
 		//Scale the stack in twice
 		scaleVal = 0.5;
 		run("Scale...", 
@@ -85,58 +85,83 @@ function process(inputPath, outputPath, sliceStep, fishPrefix, fileExt, statisti
 			//run("3D Objects Counter", "threshold=25 slice=928 min.=10 max.=376042500 statistics summary");
 			//saveStatistics(outputPath, fishPrefix, fishNumbers[i], scaledVolSize, colorDepth, fishPrefix, statisticsOutputExt);
 		}
-
+*/
 		//Estimate crossections with specified step
 		effectiveNumSlices = volumeZBoundaries[1] - volumeZBoundaries[0] + 1;
 		currentSliceStep = floor(effectiveNumSlices * (sliceStep / 100));
 		numOfSteps = floor(effectiveNumSlices / currentSliceStep);
 
-		//print("effectiveNumSlices=" + toString(effectiveNumSlices));
-		//print("currentSliceStep=" + toString(currentSliceStep));
-		//print("numOfSteps=" + toString(numOfSteps));
+		print("effectiveNumSlices=" + toString(effectiveNumSlices));
+		print("currentSliceStep=" + toString(currentSliceStep));
+		print("numOfSteps=" + toString(numOfSteps));
 
-		newImage("averaged_" + currentFileNameNoExt, toString(colorDepth) + "-bit grayscale-mode", stackWidth, stackHeight, 1, numOfSteps + 1, 1);
-		newStackId = getImageID();
+		//newImage("averaged_" + currentFileNameNoExt, toString(colorDepth) + "-bit grayscale-mode", stackWidth, stackHeight, 1, numOfSteps + 1, 1);
+		//newStackId = getImageID();
 
-		outputCrossectionStatisticResults = "cross_section_statistic_" + currentFileNameNoExt + "_" + toString(stackWidth) + "x" + toString(stackHeight) + "x" + toString(stackSlices);
-		run("Table...", "name=" + outputCrossectionStatisticResults);
-		outputStatisticId = getImageID();
+		run("Particles8 ", "white morphology show=Particles minimum=0 maximum=9999999 overwrite redirect=None");
+		headings = split(String.getResultsHeadings);
+		headersStr = "\\Headings: CSIndex ";
+		for (i = 3; i < headings.length; i++) {
+			headersStr += "\t " + headings[i] + " ";
+		}
+		
+		actualName = "Cross-Section Summary";
+		crossSectionSummaryTableName = "[" + actualName + "]";
+				   
+		if (!isOpen(actualName)) {
+			run("New... ", "name=" + crossSectionSummaryTableName + " type=Table");
+			print(crossSectionSummaryTableName, headersStr);
+		}
 
 		//Estimate shape parameters of each step-slice
-		for (step = 0; step <= numOfSteps; step++) {
+		for (step = 0; step < numOfSteps; step++) {
 			sliceIdx = step * currentSliceStep + volumeZBoundaries[0];
 			neighboursIndices = getNeighboursIndices(sliceIdx, stackSlices, sliceNeighbours);
-
+			
 			selectImage(stackId);
 			
 			run("Duplicate...", "duplicate range=" + toString(neighboursIndices[0]) + "-" + toString(neighboursIndices[neighboursIndices.length - 1]));
-			dupStackId = getImageID();
-			run("Particles8 ", "white morphology show=Particles minimum=0 maximum=9999999 redirect=None");
-			//run("Summarize");
-			interStatisticId = getImageID();
-			averageResults(interStatisticId, outputStatisticId, step);
+			duplicatedStack = getImageID();
+			selectImage(duplicatedStack);
 
-			selectImage(interStatisticId);
-			IJ.deleteRows(0, neighboursIndices.length - 1);
+			run("Particles8 ", "white morphology show=Particles minimum=50 maximum=9999999 display overwrite redirect=None");
+			numResults = nResults();
+			run("Summarize");
+			
+			print("numResults=" + numResults);
 
-			selectImage(dupStackId);
-			close();
+			firstTitleIdx = 3;
+			headings = split(String.getResultsHeadings);
+
+			rowItem = toString(step) + "\t";
+
+			for (col = firstTitleIdx; col < headings.length; col++) {
+				currentColumnTitle = headings[col];
+
+				if (numResults > 0 && numResults <= 1) {
+					rowItem += toString(getResult(currentColumnTitle, numResults - 1));
+				}
+				else {
+					rowItem += toString(getResult(currentColumnTitle, numResults - 1));
+				}
+				
+				if (col > firstTitleIdx || col < headings.length - 1) {
+					 rowItem += "\t";
+				}
+			}
+
+			print(crossSectionSummaryTableName, rowItem);
 			
-/*
-			selectImage(stackId);
-			setSlice(sliceIdx);
+			//selectImage(duplicatedStack);
+			//close();
+
+			//selectImage(stackId);
+			//setSlice(sliceIdx);
 			
-			run("Select All");
-			run("Copy");
-			
-			selectImage(newStackId);
-			setSlice(step + 1);
-			run("Paste");
-			*/
+			Array.print(neighboursIndices);
 		}
 
-		selectImage(outputStatisticId);
-		saveStatistics("coross_sections", outputPath, fishPrefix, fishNumbers[i], volSize, colorDepth, fishPrefix, statisticsOutputExt);
+		//saveStatistics("coross_sections", outputPath, fishPrefix, fishNumbers[i], volSize, colorDepth, fishPrefix, statisticsOutputExt);
 	}
 }
 
@@ -201,25 +226,28 @@ function getNeighboursIndices(currentIndex, numOfSlices, sliceNeighbours) {
 	return outputIndices;
 }
 
-function averageResults(interStatisticId, outputStatisticId, rowIndex) {
-	selectImage(interStatisticId);
-
-	sum_val = 0;
+function averageResults(resultTableName, rowIndex) {
+	sumVal = 0;
+	firstTitleIdx = 3;
 	headings = split(String.getResultsHeadings);
+	rowItem = "";
 
-	for (col = 0; col < headings.length; col++) {
-		selectImage(interStatisticId);
-
+	for (col = firstTitleIdx; col < headings.length; col++) {
 		currentColumnTitle = headings[col];
 
+		rowItem += toString(rowIndex) + "\t";
+
 		for (row = 0; row < nResults; row++) {
-			sum_val += parseFloat(getResult(currentColumnTitle, row));
+			sumVal += parseFloat(getResult(currentColumnTitle, row));
 		}
 
-		sum_val /= nResults;
-		
-		selectImage(outputStatisticId);
+		sumVal /= nResults;
+		rowItem += toString(sumVal);
 
-		setResult(currentColumnTitle, rowIndex, sum_val);
+		if (col > firstTitleIdx || col < headings.length - 1) {
+			 rowItem += "\t";
+		}
 	}
+
+	print(resultTableName, rowItem);
 }
