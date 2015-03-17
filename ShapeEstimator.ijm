@@ -4,7 +4,7 @@
 macro "Estimate shape of fishes" {
 	requires("1.49h")
 	
-	var inputPath = "D:\\Roman\\XRegio\\Segmentations";
+	var inputPath = "D:\\Roman\\XRegio\\Segmentations2";
 	var outputPath = "D:\\Roman\\XRegio\\Results";
 	//var inputPath = "/Users/Roman/Documents/test_segmentations";
 	//var outputPath = "/Users/Roman/Documents/test_results";
@@ -114,21 +114,20 @@ function process(inputPath, outputPath, sliceStep, fishPrefix, fileExt, statisti
 		}
 
 		//Estimate shape parameters of each step-slice
-		for (step = 0; step < numOfSteps; step++) {
+		for (step = 0; step < 2; step++) {
 			sliceIdx = step * currentSliceStep + volumeZBoundaries[0];
 			neighboursIndices = getNeighboursIndices(sliceIdx, stackSlices, sliceNeighbours);
 			
 			selectImage(stackId);
 			
-			run("Duplicate...", "duplicate range=" + toString(neighboursIndices[0]) + "-" + toString(neighboursIndices[neighboursIndices.length - 1]));
+			run("Duplicate...", "duplicate range=" + toString(neighboursIndices[0]) + "-" + toString(neighboursIndices[neighboursIndices.length - 1]) + " title=[duplicate_step_" + toString(step) + "]");
 			duplicatedStack = getImageID();
-			selectImage(duplicatedStack);
+			
 
-			run("Particles8 ", "white morphology show=Particles minimum=50 maximum=9999999 display overwrite redirect=None");
+			run("Particles8 ", "white morphology show=Particles filter minimum=25 maximum=9999999 display overwrite redirect=None");
 			numResults = nResults();
 			run("Summarize");
 			
-			print("numResults=" + numResults);
 
 			firstTitleIdx = 3;
 			headings = split(String.getResultsHeadings);
@@ -142,7 +141,7 @@ function process(inputPath, outputPath, sliceStep, fishPrefix, fileExt, statisti
 					rowItem += toString(getResult(currentColumnTitle, numResults - 1));
 				}
 				else {
-					rowItem += toString(getResult(currentColumnTitle, numResults - 1));
+					rowItem += toString(getResult(currentColumnTitle, numResults));
 				}
 				
 				if (col > firstTitleIdx || col < headings.length - 1) {
@@ -151,14 +150,11 @@ function process(inputPath, outputPath, sliceStep, fishPrefix, fileExt, statisti
 			}
 
 			print(crossSectionSummaryTableName, rowItem);
-			
-			//selectImage(duplicatedStack);
-			//close();
 
-			//selectImage(stackId);
-			//setSlice(sliceIdx);
+			run("Clear Results");
 			
-			Array.print(neighboursIndices);
+			selectImage(duplicatedStack);
+			close();
 		}
 
 		//saveStatistics("coross_sections", outputPath, fishPrefix, fishNumbers[i], volSize, colorDepth, fishPrefix, statisticsOutputExt);
