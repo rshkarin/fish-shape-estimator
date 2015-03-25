@@ -1,9 +1,10 @@
 from ij import IJ, ImagePlus, ImageStack
 from ij.io import TiffDecoder, FileSaver
+from ij.plugin.frame import RoiManager
 from ij.process import ImageStatistics as IS
 from ij.plugin.filter import ParticleAnalyzer as PA
-from ij.plugin.filter import Analyzer
-from ij.measure import Measurements as ME
+from ij.measure import ResultsTable, Measurements
+from java.lang import Double
 import os
 import sys
 import datetime
@@ -47,26 +48,37 @@ def getStackBoundaries(imp):
 	return fisrtSlice, lastSlice
 
 def getMaximumAreaStack(imp, voxelSize):
-	paResTable = ResultsTable()
-	paOptions = ParticleAnalyzer.DISPLAY_SUMMARY + ParticleAnalyzer.SHOW_ROI_MASKS + ParticleAnalyzer.SHOW_PROGRESS + ParticleAnalyzer.CLEAR_WORKSHEET
-	paMeasurements = ParticleAnalyzer.AREA + ParticleAnalyzer.STACK_POSITION
-	pa = ParticleAnalyzer(paOptions, paMeasurements, paResTable, 0, sys.maxint)
+	paOptions = ParticleAnalyzer.SHOW_ROI_MASKS + ParticleAnalyzer.SHOW_PROGRESS + ParticleAnalyzer.CLEAR_WORKSHEET
+	paMeasurements = Measurements.AREA
+	rt = ResultsTable()
+
+	pa = ParticleAnalyzer(paOptions, paMeasurements, rt, 0, Double.POSITIVE_INFINITY, 0.0, 1.0)
 	pa.setHideOutputImage(True)
 
 	maxAreaStack = ImageStack(imp.getWidth(), imp.getHeight())
 	totalVolumeArea = 0
 
 	for i in range(imp.getStackSize()):
-	#for i in range(60,5):
-		IJ.showProgress(i, imp.getStackSize() + 1)
 		imp.setSliceWithoutUpdate(i + 1)
 		pa.analyze(imp)
+		print rt.getRowAsString(i + 1)
+ 
 
+	#return totalVolumeArea, ImagePlus("max_area_stack_" + imp.getTitle(), maxAreaStack)
+	return totalVolumeArea
+
+"""
+	for i in range(imp.getStackSize()):
+		imp.setSliceWithoutUpdate(i + 1)
+
+		pa.analyze(imp)
+	
 		countMask = pa.getOutputImage()
 
-		
+		print rt.getColumn(ResultsTable.AREA)
+
 		#pa.saveResults(countMask.getStatistics(ME.AREA), countMask.getRoi())
-		print countMask.getStatistics(ME.AREA)
+		#print countMask.getStatistics(ME.AREA)
 		#resultTable = ResultsTable.getResultsTable()
 		#print resultTable
 		#area = resultTable.getColumnAsDoubles(resultTable.getColumnIndex("Area"))
@@ -80,8 +92,7 @@ def getMaximumAreaStack(imp, voxelSize):
 		#totalVolumeArea += maxArea / (voxelSize[0] * voxelSize[1])
 
 	IJ.showProgress(1) 
-
-	return totalVolumeArea, ImagePlus("max_area_stack_" + imp.getTitle(), maxAreaStack)
+"""
 
 def estimateShape(inputPath, outputPath, sliceStep, fishPrefix, fileExt, methodPrefix, statisticsOutputExt, fishNumbers, sliceNeighbours):
 	for fishNumber in fishNumbers:
@@ -113,11 +124,12 @@ def estimateShape(inputPath, outputPath, sliceStep, fishPrefix, fileExt, methodP
 
 		firstZBound, lastZBound = getStackBoundaries(imp)
 		
-		totalVolumeArea, impMaxAreaStack = getMaximumAreaStack(imp, voxelSize)
+		#totalVolumeArea, impMaxAreaStack = getMaximumAreaStack(imp, voxelSize)
+		totalVolumeArea = getMaximumAreaStack(imp, voxelSize)
 		print "totalVolumeArea = %d" % totalVolumeArea
 
-		fs = FileSaver(impMaxAreaStack)
-		fs.saveAsTiffStack(os.path.join(outputPath, "max_area_stack_" + currentFileName))
+		#fs = FileSaver(impMaxAreaStack)
+		#fs.saveAsTiffStack(os.path.join(outputPath, "max_area_stack_" + currentFileName))
 
 			
 #def saveStatistics():
