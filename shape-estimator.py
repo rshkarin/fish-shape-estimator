@@ -1,26 +1,28 @@
 from ij import IJ, ImagePlus, ImageStack
 from ij.io import TiffDecoder, FileSaver
 from ij.plugin.frame import RoiManager
-from ij.process import ImageStatistics, ByteProcessor
+from ij.process import ImageStatistics, ByteProcessor, ImageConverter
 from ij.plugin.filter import ParticleAnalyzer
+import ij.plugin.filter.PlugInFilter;
 from ij.measure import ResultsTable, Measurements
 from java.lang import Double
 import os
 import sys
 import datetime
+import math
 
-inputPath = "D:\\Roman\\XRegio\\Segmentations2"
-outputPath = "D:\\Roman\\XRegio\\Results"
+#inputPath = "D:\\Roman\\XRegio\\Segmentations2"
+#outputPath = "D:\\Roman\\XRegio\\Results"
 
-#inputPath = "/Users/Roman/Documents/test_segmentations";
-#outputPath = "/Users/Roman/Documents/test_results";
+inputPath = "/Users/Roman/Documents/test_segmentations";
+outputPath = "/Users/Roman/Documents/test_results";
 
 methodPrefix = "segmented_median"
 fishPrefix = "fish"
 fileExt = ".tif"
 statisticsOutputExt = ".csv"
-#fishNumbers = ["200"]
-fishNumbers = ["3000"];
+fishNumbers = ["200"]
+#fishNumbers = ["3000"];
 #fishNumbers = ["200", "202","204","214","215","221","223","224","226","228","230","231","233","235","236","237","238","239","243","244","245"];
 
 sliceStep = 10 #in percentage
@@ -34,15 +36,14 @@ def printLog(title, message):
 
 def getStackBoundaries(imp):
 	fisrtSlice, lastSlice = 0, 0
-	print list(imp.getImageStack().getProcessor(151).convertToByteProcessor().getPixels())
-	
+
 	for i in range(imp.getStackSize()):
-		if sum(imp.getImageStack().getProcessor(i + 1).getPixels()) > 0:
+		if sum([imp.getImageStack().getProcessor(i + 1).get(k) for k in range(imp.getImageStack().getProcessor(i + 1).getPixelCount())]) > 0:
 			fisrtSlice = i + 1
 			break
 
 	for i in reversed(range(imp.getStackSize())):
-		if sum(imp.getImageStack().getProcessor(i + 1).getPixels()) > 0:
+		if sum([imp.getImageStack().getProcessor(i + 1).get(k) for k in range(imp.getImageStack().getProcessor(i + 1).getPixelCount())]) > 0:
 			lastSlice = i + 1
 			break
 			
@@ -60,7 +61,7 @@ def getMaximumAreaStack(imp, voxelSize):
 	totalVolumeArea = 0
 
 	for i in range(imp.getStackSize()):
-		IJ.showProgress(i, imp.getStackSize() + 1)  
+		IJ.showProgress(i, imp.getStackSize() + 1)
 		
 		imp.setSliceWithoutUpdate(i + 1)
 		pa.analyze(imp)
@@ -107,22 +108,47 @@ def estimateShape(inputPath, outputPath, sliceStep, fishPrefix, fileExt, methodP
 
 		stackInfo = td.getTiffInfo()
 		voxelSize = [stackInfo[0].pixelWidth, stackInfo[0].pixelHeight, stackInfo[0].pixelDepth]
-		print voxelSize
 
-		firstZBound, lastZBound = getStackBoundaries(imp)
-		print "f = %d, l = %d" % (firstZBound, lastZBound)
+		lowZbound, highZbound = getStackBoundaries(imp)
 		
 		totalVolumeArea, impMaxAreaStack = getMaximumAreaStack(imp, voxelSize)
-		#totalVolumeArea = getMaximumAreaStack(imp, voxelSize)
 		print "totalVolumeArea = %d" % totalVolumeArea
 
 		#fs = FileSaver(impMaxAreaStack)
 		#fs.saveAsTiffStack(os.path.join(outputPath, "max_area_stack_" + currentFileName))
 
+def getNeighboursIndices(currentIndex, numOfSlices, sliceNeighbours):
+	halfSliceNeighbours = math.floor(sliceNeighbours / 2);
+
+	if sliceNeighbours % 2 == 0:
+		sliceNeighbours -= 1
+
+	return filter(lambda x: x >= 1 and x <= numOfSlices, 
+		range(currentIndex - halfSliceNeighbours, currentIndex + halfSliceNeighbours + 1))
+
+def collectCrossSectionStatistic(imp, lowZbound, highZbound, sliceStep, sliceNeighbours):
+	effectiveNumSlices = highZbound - lowZbound + 1
+	currentSliceStep = math.floor(effectiveNumSlices * (sliceStep / 100))
+	numOfSteps = math.floor(effectiveNumSlices / currentSliceStep)
+
+	for step in range(numOfSteps + 1):
+		IJ.showProgress(step, numOfSteps)
+
+		sliceIdx = step * currentSliceStep + lowZbound
+		neighboursIndices = getNeighboursIndices(sliceIdx, imp.getStackSize(), sliceNeighbours)
+
+		# do smth
+
+
+
+
+	IJ.showProgress(1)
+
+
+
 			
 #def saveStatistics():
 
 
-#def getNeighboursIndices():
 
 estimateShape(inputPath, outputPath, sliceStep, fishPrefix, fileExt, methodPrefix, statisticsOutputExt, fishNumbers, sliceNeighbours)
