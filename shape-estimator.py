@@ -1,29 +1,30 @@
 from ij import IJ, ImagePlus, ImageStack
 from ij.io import TiffDecoder, FileSaver
 from ij.plugin.frame import RoiManager
-from ij.process import ImageStatistics, ByteProcessor, ImageConverter
+from ij.process import ImageStatistics, ByteProcessor, FloatProcessor, ShortProcessor, ImageConverter
 from ij.plugin.filter import ParticleAnalyzer
 import ij.plugin.filter.PlugInFilter;
 from ij.measure import ResultsTable, Measurements
 from java.lang import Double
+from java.lang import Character
 import os, sys, datetime, math, csv, codecs, cStringIO
 
-#inputPath = "D:\\Roman\\XRegio\\Segmentations2"
-#outputPath = "D:\\Roman\\XRegio\\Results"
+inputPath = "D:\\Roman\\XRegio\\Segmentations2"
+outputPath = "D:\\Roman\\XRegio\\Results"
 
-inputPath = "/Users/Roman/Documents/test_segmentations";
-outputPath = "/Users/Roman/Documents/test_results";
+#inputPath = "/Users/Roman/Documents/test_segmentations";
+#outputPath = "/Users/Roman/Documents/test_results";
 
 methodPrefix = "segmented_median"
 fishPrefix = "fish"
 fileExt = ".tif"
 statisticsOutputExt = ".csv"
-fishNumbers = ["200"]
-#fishNumbers = ["3000"];
+#fishNumbers = ["200"]
+fishNumbers = ["3000"];
 #fishNumbers = ["200", "202","204","214","215","221","223","224","226","228","230","231","233","235","236","237","238","239","243","244","245"];
 
 sliceStep = 10 #in percentage
-sliceNeighbours = 31 #odd number, othgerwise will be corrected by -1
+sliceNeighbours = 5 #odd number, othgerwise will be corrected by -1
 collectCrossSectionStatistics = True
 collectObjectCounterStatistics = False
 voxelSize = [1, 1, 1]
@@ -66,19 +67,26 @@ def getMaximumAreaStack(imp, voxelSize):
 		countMask = pa.getOutputImage()
 
 		area = rt.getColumn(ResultsTable.AREA)
+		
 		if area:
 			maxArea = max(area)
 			maxAreaId = area.index(maxArea) + 1
-			filteredPixels = map(lambda x: 0 if x != maxAreaId else x, countMask.getProcessor().getPixels())
-			impFiltered = ByteProcessor(imp.getWidth(), imp.getHeight(), filteredPixels)
-			maxAreaStack.addSlice(impFiltered)
+			filteredPixels = map(lambda x: 0 if x != maxAreaId else 255, countMask.getProcessor().convertToFloat().getPixels())
 			totalVolumeArea += maxArea / (voxelSize[0] * voxelSize[1])
+		else:
+			filteredPixels = countMask.getProcessor().convertToFloat().getPixels()
+			
+		impFiltered = FloatProcessor(imp.getWidth(), imp.getHeight(), filteredPixels, None)
+		maxAreaStack.addSlice(impFiltered)
 
 		rt.reset()
 
 	IJ.showProgress(1)
 
-	return totalVolumeArea, ImagePlus("max_area_stack_" + imp.getTitle(), maxAreaStack)
+	outImage = ImagePlus("max_area_stack_" + imp.getTitle(), maxAreaStack)
+	ImageConverter(outImage).convertToGray8()
+
+	return totalVolumeArea, outImage
 
 def getNeighboursIndices(currentIndex, numOfSlices, sliceNeighbours):
 	halfSliceNeighbours = math.floor(sliceNeighbours / 2);
@@ -102,8 +110,10 @@ def collectCrossSectionStatistic(imp, lowZbound, highZbound, sliceStep, sliceNei
 
 	statisticDict = {}
 
+	totalVolumeArea = 1
+
 	for step in range(numOfSteps + 1):
-		sliceIdx = step * currentSliceStep + lowZbound
+		sliceIdx = int(step * currentSliceStep + lowZbound)
 		neighboursIndices = getNeighboursIndices(sliceIdx, imp.getStackSize(), sliceNeighbours)
 
 		for localSliceIdx in neighboursIndices:
