@@ -6,25 +6,20 @@ from ij.plugin.filter import ParticleAnalyzer
 import ij.plugin.filter.PlugInFilter;
 from ij.measure import ResultsTable, Measurements
 from java.lang import Double
-import os
-import sys
-import datetime
-import math
-import collections
-import csv
+import os, sys, datetime, math, csv, codecs, cStringIO
 
-inputPath = "D:\\Roman\\XRegio\\Segmentations2"
-outputPath = "D:\\Roman\\XRegio\\Results"
+#inputPath = "D:\\Roman\\XRegio\\Segmentations2"
+#outputPath = "D:\\Roman\\XRegio\\Results"
 
-#inputPath = "/Users/Roman/Documents/test_segmentations";
-#outputPath = "/Users/Roman/Documents/test_results";
+inputPath = "/Users/Roman/Documents/test_segmentations";
+outputPath = "/Users/Roman/Documents/test_results";
 
 methodPrefix = "segmented_median"
 fishPrefix = "fish"
 fileExt = ".tif"
 statisticsOutputExt = ".csv"
-#fishNumbers = ["200"]
-fishNumbers = ["3000"];
+fishNumbers = ["200"]
+#fishNumbers = ["3000"];
 #fishNumbers = ["200", "202","204","214","215","221","223","224","226","228","230","231","233","235","236","237","238","239","243","244","245"];
 
 sliceStep = 10 #in percentage
@@ -93,7 +88,7 @@ def getNeighboursIndices(currentIndex, numOfSlices, sliceNeighbours):
 
 	return filter(lambda x: x >= 1 and x <= numOfSlices, range(currentIndex - halfSliceNeighbours, currentIndex + halfSliceNeighbours + 1))
 
-def collectCrossSectionStatistic(imp, lowZbound, highZbound, sliceStep, sliceNeighbours):
+def collectCrossSectionStatistic(imp, lowZbound, highZbound, sliceStep, sliceNeighbours, totalVolumeArea):
 	effectiveNumSlices = highZbound - lowZbound + 1
 	currentSliceStep = effectiveNumSlices * (sliceStep / 100.)
 	numOfSteps = int(effectiveNumSlices / currentSliceStep)
@@ -115,28 +110,38 @@ def collectCrossSectionStatistic(imp, lowZbound, highZbound, sliceStep, sliceNei
 			imp.setSliceWithoutUpdate(localSliceIdx)
 			pa.analyze(imp)
 
-		#if not len(statisticDict.keys()):
-		#	statisticDict = collections.defaultdict(list(rt.getHeadings()))
-		for header in list(rt.getHeadings()):
+		headers = [u'StepIdx']
+		headers.extend(list(rt.getHeadings()))
+
+		for header in headers:
 			if header not in statisticDict:
 				statisticDict[header] = []
 
-		for header in list(rt.getHeadings()):
-			colData = rt.getColumn(rt.getColumnIndex(header))
-			statisticDict[header].append(float(sum(colData)) / len(colData) if len(colData) > 0 else float(0))
-			
+		for header in headers:
+			if header != 'StepIdx':
+				colData = rt.getColumn(rt.getColumnIndex(header))
+				statisticDict[header].append(float(sum(colData)) / len(colData) / totalVolumeArea if len(colData) > 0 else float(0))
+			else:
+				statisticDict[header].append(step)
+
 		rt.reset()
 
-	return statisticDict
+	return headers, statisticDict
 
-def writeStatistics(outputPath, fileName, fileExt, statDict):
-	with open(os.path.join(outputPath, fileName + fileExt),'w') as fout:
-	writer = csv.writer(fout)
-	writer.writerows([statDict.keys()])
-	
-	for row in zip(*statDict.values()):
-		row = [s.encode('utf-8') for s in row]
-		writer.writerows([row])
+def writeStatistics(outputPath, fileName, fileExt, statDict, headers):
+	if not os.path.exists(outputPath):
+		os.makedirs(outputPath)
+
+	outFile = open(os.path.join(outputPath, fileName + fileExt), 'w')
+	csvWriter = csv.writer(outFile, delimiter=';')
+	csvWriter.writerow(headers)
+
+	for row in range(len(statDict[headers[0]])):
+		outRow = [statDict[header][row] for header in headers]
+		print outRow
+		csvWriter.writerow(outRow)
+
+	outFile.close()
 
 def estimateShape(inputPath, outputPath, sliceStep, fishPrefix, fileExt, methodPrefix, statisticsOutputExt, fishNumbers, sliceNeighbours):
 	for fishNumber in fishNumbers:
@@ -150,7 +155,7 @@ def estimateShape(inputPath, outputPath, sliceStep, fishPrefix, fileExt, methodP
 		pathToVolume = os.path.join(currentPath, currentFileName)
 		printLog("Statistical analysis started", pathToVolume)
 
-		print 'Opening: ' + currentFileName
+		printLog("Opening", pathToVolume)
 		imp = IJ.openImage(pathToVolume)  
 
 		if imp is None:  
@@ -165,23 +170,18 @@ def estimateShape(inputPath, outputPath, sliceStep, fishPrefix, fileExt, methodP
 		stackInfo = td.getTiffInfo()
 		voxelSize = [stackInfo[0].pixelWidth, stackInfo[0].pixelHeight, stackInfo[0].pixelDepth]
 
+		printLog("Obtaining Z bounds", pathToVolume)
 		lowZbound, highZbound = getStackBoundaries(imp)
 
-		print "%d %d" % (lowZbound, highZbound) 
+		printLog("Obtaining max stack area", pathToVolume)
+		totalVolumeArea, impMaxAreaStack = getMaximumAreaStack(imp, voxelSize)
 
-		
-		#totalVolumeArea, impMaxAreaStack = getMaximumAreaStack(imp, voxelSize)
-		#print "totalVolumeArea = %d" % totalVolumeArea
-		
-		
-		statisticsDict = collectCrossSectionStatistic(imp, lowZbound, highZbound, sliceStep, sliceNeighbours)
+		printLog("Collecting statistics", pathToVolume)
+		headers, statisticsDict = collectCrossSectionStatistic(impMaxAreaStack, lowZbound, highZbound, sliceStep, sliceNeighbours, totalVolumeArea)
 
-		writeStatistics(outputPath, fishPrefix + fishNumber, statisticsOutputExt, statisticsDict)
-
-		
-		#fs = FileSaver(impMaxAreaStack)
-		#fs.saveAsTiffStack(os.path.join(outputPath, "max_area_stack_" + currentFileName))
-		
+		csvOutPath = os.path.join(outputPath, fishPrefix + fishNumber)
+		printLog("Write statistics", csvOutPath)
+		writeStatistics(csvOutPath, "statistics_" + os.path.splitext(currentFileName)[0], statisticsOutputExt, statisticsDict, headers)
 
 		
 estimateShape(inputPath, outputPath, sliceStep, fishPrefix, fileExt, methodPrefix, statisticsOutputExt, fishNumbers, sliceNeighbours)
